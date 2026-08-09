@@ -1,0 +1,58 @@
+LICENCIA DE USO — NEPOS (Sistema de Punto de Venta)
+
+Este software ("NEPOS") es propiedad de [NOMBRE DE TU EMPRESA O EQUIPO],
+y se entrega bajo los siguientes términos:
+
+1. OTORGAMIENTO DE LICENCIA
+   Se otorga al cliente una licencia de uso no exclusiva e intransferible
+   para instalar y utilizar NEPOS exclusivamente en los equipos y locales
+   del negocio para el cual fue contratado. Esta licencia no incluye la
+   transferencia de la propiedad del software.
+
+2. RESTRICCIONES
+   El cliente no podrá:
+   - Redistribuir, revender, sublicenciar o ceder el software a terceros
+     sin autorización previa por escrito.
+   - Realizar ingeniería inversa, descompilar o intentar extraer el
+     código fuente del ejecutable, salvo lo permitido por ley.
+   - Utilizar el software para desarrollar un producto competidor.
+
+3. PROPIEDAD INTELECTUAL
+   Todo el código fuente, diseño, marca "NEPOS" y documentación
+   relacionada son propiedad de [NOMBRE DE TU EMPRESA O EQUIPO]. Esta
+   licencia no transfiere derechos de autor ni propiedad intelectual
+   al cliente.
+
+4. DATOS DEL NEGOCIO
+   Toda la información cargada en el sistema (productos, ventas, stock,
+   usuarios) es propiedad exclusiva del cliente. El desarrollador no
+   accede, almacena ni utiliza esos datos, que residen únicamente en la
+   base de datos local del cliente.
+
+5. GARANTÍA Y RESPONSABILIDAD
+   El software se entrega "tal cual" (as is). Se realizarán correcciones
+   de errores reportados dentro del período de soporte acordado, pero no
+   se garantiza que el software esté libre de errores en su totalidad.
+   El desarrollador no será responsable por pérdidas económicas
+   derivadas del uso o mal funcionamiento del software, más allá de las
+   correcciones razonables durante el período de soporte.
+
+6. RESPALDOS
+   El software genera copias de seguridad automáticas de la base de
+   datos en la carpeta local del sistema. Es responsabilidad del cliente
+   verificar periódicamente que estos respaldos se estén generando
+   correctamente y conservarlos en un lugar seguro.
+
+7. ACTUALIZACIONES Y SOPORTE
+   Las condiciones de soporte técnico y actualizaciones futuras se
+   acuerdan por separado entre las partes.
+
+8. VIGENCIA
+   Esta licencia tiene vigencia desde la fecha de entrega del software y
+   se mantiene mientras el cliente cumpla con los términos aquí
+   descritos.
+
+Al hacer clic en "Acepto" durante la instalación, el usuario confirma
+haber leído y aceptado estos términos.
+
+Fecha de esta versión: [COMPLETAR FECHA DE ENTREGA]
