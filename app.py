@@ -18,7 +18,7 @@ from services.migracion_service import (
     ErrorMigracion,
     actualizar_base_si_es_necesario,
 )
-from utils.rutas import directorio_datos, directorio_logs
+from utils.rutas import directorio_logs, directorio_runtime
 from version import __version__
 
 INTERVALO_BACKUP_HORAS = 1
@@ -129,7 +129,7 @@ app.setApplicationName("NEPOS")
 app.setApplicationVersion(__version__)
 app.setStyleSheet(ESTILO_GLOBAL)
 
-bloqueo_instancia = QLockFile(str(directorio_datos() / "nepos.lock"))
+bloqueo_instancia = QLockFile(str(directorio_runtime() / "nepos.lock"))
 bloqueo_instancia.setStaleLockTime(0)
 if not bloqueo_instancia.tryLock(100):
     QMessageBox.warning(
@@ -147,12 +147,14 @@ temporizador_backup.start(INTERVALO_BACKUP_HORAS * 60 * 60 * 1000)
 
 conexion_ok, error = probar_conexion()
 if not conexion_ok:
+    logger.error("No se pudo conectar a MySQL: %s", error)
     QMessageBox.critical(
         None,
         "Error de conexión",
         "No se pudo conectar a la base de datos.\n\n"
-        "Verificá que MySQL esté encendido (Servicios de Windows > MySQL80)\n"
-        "y que los datos en el archivo .env sean correctos.\n\n"
+        "Verificá que MySQL esté encendido en Servicios de Windows\n"
+        "y que la configuración de conexión sea correcta.\n"
+        "Configuración permanente: C:\\ProgramData\\NEPOS\\config.env\n\n"
         f"Detalle técnico: {error}",
     )
     sys.exit(1)
@@ -160,6 +162,7 @@ if not conexion_ok:
 try:
     actualizar_base_si_es_necesario()
 except ErrorMigracion as error:
+    logger.error("No se pudieron aplicar las migraciones: %s", error)
     QMessageBox.critical(
         None,
         "No se pudo actualizar NEPOS",

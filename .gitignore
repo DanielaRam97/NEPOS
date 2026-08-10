@@ -1,0 +1,11 @@
+﻿.env
+config.env
+.venv/
+__pycache__/
+*.py[cod]
+*.log
+backups/
+cierres/
+logs/
+build/
+dist/
