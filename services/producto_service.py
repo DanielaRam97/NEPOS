@@ -1,4 +1,4 @@
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import joinedload, selectinload
 
 from database.conexion import nueva_sesion
@@ -9,6 +9,8 @@ from database.modelos import (
     Proveedor,
     Usuario,
 )
+from services.auditoria_service import crear_registro_auditoria
+from services.iva_service import iva_categoria_formateado
 from utils.validacion import convertir_decimal_finito
 
 
@@ -71,6 +73,57 @@ def listar_categorias():
         db.close()
 
 
+def crear_categoria(nombre, usuario_id):
+    nombre = " ".join((nombre or "").strip().split())
+    if not nombre:
+        raise ErrorProducto("El nombre de la categoría es obligatorio.")
+    if len(nombre) > 80:
+        raise ErrorProducto(
+            "El nombre de la categoría no puede superar los 80 caracteres."
+        )
+
+    db = nueva_sesion()
+    try:
+        _validar_permiso(db, usuario_id)
+        existente = (
+            db.query(Categoria)
+            .filter(func.lower(Categoria.nombre) == nombre.lower())
+            .first()
+        )
+        if existente:
+            raise ErrorProducto(
+                f"Ya existe la categoría '{existente.nombre}'."
+            )
+
+        categoria = Categoria(
+            nombre=nombre,
+            iva=iva_categoria_formateado(nombre),
+        )
+        db.add(categoria)
+        db.flush()
+        db.add(
+            crear_registro_auditoria(
+                accion="CREAR_CATEGORIA",
+                entidad="CATEGORIA",
+                entidad_id=categoria.id,
+                usuario_id=usuario_id,
+                detalle={
+                    "nombre": categoria.nombre,
+                    "iva": categoria.iva,
+                },
+            )
+        )
+        db.commit()
+        db.refresh(categoria)
+        db.expunge(categoria)
+        return categoria
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+
 def listar_proveedores():
     db = nueva_sesion()
     try:
@@ -128,7 +181,7 @@ def crear_producto(
 
         categoria = db.get(Categoria, categoria_id)
         if not categoria:
-            raise ErrorProducto("Categoría inválida.")
+            raise ErrorProducto("Seleccioná o creá una categoría.")
         if proveedor_id and not db.get(Proveedor, proveedor_id):
             raise ErrorProducto("Proveedor inválido.")
         if grupo_precio_id:
@@ -226,7 +279,7 @@ def actualizar_producto(
 
         categoria = db.get(Categoria, categoria_id)
         if not categoria:
-            raise ErrorProducto("Categoría inválida.")
+            raise ErrorProducto("Seleccioná o creá una categoría.")
         if proveedor_id and not db.get(Proveedor, proveedor_id):
             raise ErrorProducto("Proveedor inválido.")
         if grupo_precio_id:

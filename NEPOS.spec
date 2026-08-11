@@ -18,6 +18,8 @@ datos = [
 imports_ocultos = collect_submodules("alembic")
 imports_ocultos += collect_submodules("sqlalchemy.dialects.mysql")
 imports_ocultos += [
+    "logging.config",
+    "logging.handlers",
     "pymysql",
     "win32print",
 ]
@@ -63,4 +65,3 @@ coll = COLLECT(
     upx_exclude=[],
     name="NEPOS",
 )
-

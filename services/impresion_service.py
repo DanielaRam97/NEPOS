@@ -220,14 +220,28 @@ def listar_impresoras():
         raise ErrorImpresion(
             "Falta pywin32. Ejecutá: python -m pip install pywin32"
         ) from error
+    try:
+        impresoras = win32print.EnumPrinters(
+            win32print.PRINTER_ENUM_LOCAL
+            | win32print.PRINTER_ENUM_CONNECTIONS
+        )
+    except Exception as error:
+        codigo = getattr(error, "winerror", None)
+        if codigo is None and getattr(error, "args", None):
+            codigo = error.args[0]
+
+        # 1722: RPC no disponible. 1060/1062: servicio de impresión ausente
+        # o detenido. La impresora es opcional, por lo que estas condiciones
+        # deben comportarse igual que una PC sin impresoras instaladas.
+        if codigo in (1060, 1062, 1722):
+            return []
+
+        raise ErrorImpresion(
+            f"Windows no permitió consultar las impresoras: {error}"
+        ) from error
+
     return sorted(
-        {
-            impresora[2]
-            for impresora in win32print.EnumPrinters(
-                win32print.PRINTER_ENUM_LOCAL
-                | win32print.PRINTER_ENUM_CONNECTIONS
-            )
-        },
+        {impresora[2] for impresora in impresoras},
         key=str.casefold,
     )
 

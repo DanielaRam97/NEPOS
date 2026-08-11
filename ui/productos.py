@@ -13,6 +13,7 @@ from services.producto_service import (
     ErrorProducto,
     actualizar_producto,
     cambiar_estado_producto,
+    crear_categoria,
     crear_producto,
     listar_categorias,
     listar_productos,
@@ -425,6 +426,17 @@ class VentanaProductos(QWidget):
         self.campo_plu = QLineEdit()
         self.campo_descripcion = QLineEdit()
         self.combo_categoria = QComboBox()
+        self.boton_nueva_categoria = QPushButton("+ Nueva categoría")
+        self.boton_nueva_categoria.setToolTip(
+            "Crea una categoría y la selecciona para este producto."
+        )
+        self.boton_nueva_categoria.clicked.connect(
+            self.agregar_categoria
+        )
+        fila_categoria = QHBoxLayout()
+        fila_categoria.setContentsMargins(0, 0, 0, 0)
+        fila_categoria.addWidget(self.combo_categoria, 1)
+        fila_categoria.addWidget(self.boton_nueva_categoria)
         self.combo_proveedor = QComboBox()
         self.campo_costo = QLineEdit()
         self.campo_precio = QLineEdit()
@@ -503,7 +515,7 @@ class VentanaProductos(QWidget):
         form.addWidget(self.campo_descripcion, 1, 1, 1, 3)
 
         form.addWidget(QLabel("Categoría:"), 2, 0)
-        form.addWidget(self.combo_categoria, 2, 1)
+        form.addLayout(fila_categoria, 2, 1)
         form.addWidget(QLabel("Proveedor:"), 2, 2)
         form.addWidget(self.combo_proveedor, 2, 3)
 
@@ -550,6 +562,7 @@ class VentanaProductos(QWidget):
             self.boton_guardar.setEnabled(False)
             self.boton_estado.setEnabled(False)
             self.boton_importar.setEnabled(False)
+            self.boton_nueva_categoria.setEnabled(False)
             self.boton_nuevo_grupo.setEnabled(False)
         self.boton_aprobar.setVisible(self.usuario.rol == "ADMIN")
         self.boton_aprobar.setEnabled(False)
@@ -557,16 +570,9 @@ class VentanaProductos(QWidget):
         self._habilitar_formulario(False)
 
     def _cargar_catalogos(self):
-        self.categorias = listar_categorias()
         self.proveedores = listar_proveedores()
         self.grupos_precio = listar_grupos_precio()
-
-        self.combo_categoria_filtro.clear()
-        self.combo_categoria_filtro.addItem("Todas las categorías", None)
-        self.combo_categoria.clear()
-        for categoria in self.categorias:
-            self.combo_categoria_filtro.addItem(categoria.nombre, categoria.id)
-            self.combo_categoria.addItem(categoria.nombre, categoria.id)
+        self._recargar_categorias()
 
         self.combo_proveedor.clear()
         self.combo_proveedor.addItem("Sin proveedor", None)
@@ -577,6 +583,74 @@ class VentanaProductos(QWidget):
         self.combo_grupo_precio.addItem("Sin grupo", None)
         for grupo in self.grupos_precio:
             self.combo_grupo_precio.addItem(grupo.nombre, grupo.id)
+
+    def _recargar_categorias(self, seleccionar_id=None):
+        filtro_actual = self.combo_categoria_filtro.currentData()
+        categoria_actual = (
+            seleccionar_id
+            if seleccionar_id is not None
+            else self.combo_categoria.currentData()
+        )
+        self.categorias = listar_categorias()
+
+        self.combo_categoria_filtro.blockSignals(True)
+        self.combo_categoria_filtro.clear()
+        self.combo_categoria_filtro.addItem("Todas las categorías", None)
+        self.combo_categoria.clear()
+        for categoria in self.categorias:
+            texto = f"{categoria.nombre} · IVA {categoria.iva}"
+            self.combo_categoria_filtro.addItem(categoria.nombre, categoria.id)
+            self.combo_categoria.addItem(texto, categoria.id)
+
+        if filtro_actual is not None:
+            self._seleccionar_por_dato(
+                self.combo_categoria_filtro,
+                filtro_actual,
+            )
+        if categoria_actual is not None:
+            self._seleccionar_por_dato(
+                self.combo_categoria,
+                categoria_actual,
+            )
+        self.combo_categoria_filtro.blockSignals(False)
+
+    def agregar_categoria(self):
+        if not self.puede_editar:
+            QMessageBox.warning(
+                self,
+                "Sin permiso",
+                "Solo ADMIN o SUPERVISOR pueden crear categorías.",
+            )
+            return
+
+        nombre, aceptado = QInputDialog.getText(
+            self,
+            "Nueva categoría",
+            "Nombre de la categoría:\n\n"
+            "Carnicería y Panadería usarán IVA 10,5%.\n"
+            "Las demás categorías usarán IVA 21%.",
+        )
+        if not aceptado:
+            return
+
+        try:
+            categoria = crear_categoria(nombre, self.usuario.id)
+        except ErrorProducto as error:
+            QMessageBox.warning(
+                self,
+                "No se pudo crear la categoría",
+                str(error),
+            )
+            return
+
+        self._recargar_categorias(categoria.id)
+        iva_visible = str(categoria.iva).replace("10.5", "10,5")
+        QMessageBox.information(
+            self,
+            "Categoría creada",
+            f"Se creó '{categoria.nombre}' con IVA {iva_visible} y "
+            "quedó seleccionada para el producto.",
+        )
 
     def agregar_grupo_precio(self):
         nombre, aceptado = QInputDialog.getText(
@@ -1242,6 +1316,12 @@ class VentanaProductos(QWidget):
         if not self.check_aplicar_precio_grupo.isEnabled():
             self.check_aplicar_precio_grupo.setChecked(False)
         self.boton_guardar.setEnabled(habilitado and self.puede_editar)
+        self.boton_nueva_categoria.setEnabled(
+            habilitado and self.puede_editar
+        )
+        self.boton_nuevo_grupo.setEnabled(
+            habilitado and self.puede_editar
+        )
         self.boton_estado.setEnabled(
             self.producto_id_seleccionado is not None and self.puede_editar
         )

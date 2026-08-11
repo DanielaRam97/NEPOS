@@ -16,6 +16,8 @@ datos = [
 imports_ocultos = collect_submodules("alembic")
 imports_ocultos += collect_submodules("sqlalchemy.dialects.mysql")
 imports_ocultos += [
+    "logging.config",
+    "logging.handlers",
     "pymysql",
     "win32security",
 ]
@@ -52,4 +54,3 @@ exe = EXE(
     version=str(RAIZ / "version_info.txt"),
     uac_admin=True,
 )
-
