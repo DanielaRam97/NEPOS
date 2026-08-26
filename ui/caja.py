@@ -1,10 +1,7 @@
 from datetime import date, datetime
 
-from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtCore import QEvent, QSize, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QKeySequence
-
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont, QKeySequence
 from PySide6.QtWidgets import (
     QDialog,
     QFrame,
@@ -295,6 +292,9 @@ class VentanaCaja(QWidget):
         self.tabla.setSelectionBehavior(
             QTableWidget.SelectionBehavior.SelectRows
         )
+        self.tabla.setSelectionMode(
+            QTableWidget.SelectionMode.SingleSelection
+        )
         self.tabla.setEditTriggers(
             QTableWidget.EditTrigger.NoEditTriggers
         )
@@ -308,6 +308,9 @@ class VentanaCaja(QWidget):
             "QHeaderView::section { padding: 8px 10px; font-size: 12px; }"
         )
         self.tabla.cellDoubleClicked.connect(self.editar_cantidad)
+        self.campo_codigo.installEventFilter(self)
+        self.campo_cantidad.installEventFilter(self)
+        self.tabla.installEventFilter(self)
         layout.addWidget(self.tabla, 1)
 
         acciones = QHBoxLayout()
@@ -360,6 +363,34 @@ class VentanaCaja(QWidget):
         QTimer.singleShot(0, self._ajustar_columnas_tabla)
         self.campo_codigo.setFocus()
         return pagina
+
+    def eventFilter(self, objeto, evento):
+        if evento.type() == QEvent.Type.KeyPress:
+            tecla = evento.key()
+            if objeto in (self.campo_codigo, self.campo_cantidad) and tecla in (
+                Qt.Key.Key_Down,
+                Qt.Key.Key_PageDown,
+            ):
+                if self.carrito:
+                    fila = self.tabla.currentRow()
+                    if fila < 0:
+                        fila = len(self.carrito) - 1
+                    self.tabla.setCurrentCell(fila, 0)
+                    self.tabla.selectRow(fila)
+                    self.tabla.setFocus()
+                return True
+            if objeto is self.tabla:
+                if tecla in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    self.editar_cantidad()
+                    return True
+                if tecla == Qt.Key.Key_Delete:
+                    self.quitar_producto()
+                    return True
+                if tecla == Qt.Key.Key_Escape:
+                    self.campo_codigo.setFocus()
+                    self.campo_codigo.selectAll()
+                    return True
+        return super().eventFilter(objeto, evento)
 
     def _registrar_pagina(self, clave, widget):
         self.paginas[clave] = widget
@@ -836,18 +867,6 @@ class VentanaCaja(QWidget):
             self._limpiar_entrada()
             return
 
-        try:
-            cantidad = self._convertir_cantidad(
-                self.campo_cantidad.text() or "1"
-            )
-        except ValueError:
-            QMessageBox.warning(
-                self,
-                "Cantidad inválida",
-                "Usá un número con punto o coma decimal.",
-            )
-            return
-
         producto = buscar_producto(codigo)
         if not producto:
             respuesta = QMessageBox.question(
@@ -869,6 +888,23 @@ class VentanaCaja(QWidget):
                 return
             producto = dialogo.producto_creado
 
+        if producto.pesable:
+            cantidad = self._pedir_cantidad(producto)
+            if cantidad is None:
+                return
+        else:
+            try:
+                cantidad = self._convertir_cantidad(
+                    self.campo_cantidad.text() or "1"
+                )
+            except ValueError:
+                QMessageBox.warning(
+                    self,
+                    "Cantidad inválida",
+                    "Usá un número entero válido.",
+                )
+                return
+
         try:
             validar_cantidad(
                 cantidad,
@@ -886,12 +922,18 @@ class VentanaCaja(QWidget):
         self._limpiar_entrada()
 
     def _pedir_cantidad(self, producto):
+        es_pesable = bool(producto.pesable)
         texto, aceptado = QInputDialog.getText(
             self,
-            "Cantidad",
-            f"Cantidad de {producto.descripcion}:",
+            "Ingresar peso" if es_pesable else "Cantidad",
+            (
+                f"Peso en kg de {producto.descripcion}:\n"
+                "Podés usar punto o coma. Ejemplo: 0,750"
+                if es_pesable
+                else f"Cantidad de {producto.descripcion}:"
+            ),
             QLineEdit.EchoMode.Normal,
-            "1",
+            "0,000" if es_pesable else "1",
         )
         if not aceptado:
             return None
@@ -1085,6 +1127,13 @@ class VentanaCaja(QWidget):
             return
         self.carrito.pop(fila)
         self._refrescar_tabla()
+        if self.carrito:
+            fila = min(fila, len(self.carrito) - 1)
+            self.tabla.setCurrentCell(fila, 0)
+            self.tabla.selectRow(fila)
+            self.tabla.setFocus()
+        else:
+            self.campo_codigo.setFocus()
 
     def vaciar_carrito(self):
         if not self.carrito:
