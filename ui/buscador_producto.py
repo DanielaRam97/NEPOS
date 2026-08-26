@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -71,16 +71,20 @@ class DialogoBuscarProducto(QDialog):
             ["Código", "Producto", "Categoría", "Precio", "Stock"]
         )
         self.tabla.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.tabla.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.tabla.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tabla.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.ResizeMode.Stretch
         )
         self.tabla.itemSelectionChanged.connect(self._mostrar_detalle)
         self.tabla.cellDoubleClicked.connect(self._aceptar)
+        self.campo_busqueda.installEventFilter(self)
+        self.tabla.installEventFilter(self)
         layout.addWidget(self.tabla)
 
         self.etiqueta_detalle = QLabel(
-            "Seleccioná un producto para ver sus datos."
+            "Seleccioná un producto para ver sus datos. "
+            "↑/↓ navegan · Enter agrega · Esc vuelve al buscador."
         )
         self.etiqueta_detalle.setWordWrap(True)
         layout.addWidget(self.etiqueta_detalle)
@@ -139,6 +143,30 @@ class DialogoBuscarProducto(QDialog):
         )
         if self.productos:
             self.tabla.selectRow(0)
+            self.tabla.setCurrentCell(0, 0)
+
+    def eventFilter(self, objeto, evento):
+        if evento.type() == QEvent.Type.KeyPress:
+            tecla = evento.key()
+            if objeto is self.campo_busqueda and tecla in (
+                Qt.Key.Key_Down,
+                Qt.Key.Key_PageDown,
+            ):
+                if self.productos:
+                    fila = max(self.tabla.currentRow(), 0)
+                    self.tabla.setCurrentCell(fila, 0)
+                    self.tabla.selectRow(fila)
+                    self.tabla.setFocus()
+                return True
+            if objeto is self.tabla:
+                if tecla in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                    self._aceptar()
+                    return True
+                if tecla == Qt.Key.Key_Escape:
+                    self.campo_busqueda.setFocus()
+                    self.campo_busqueda.selectAll()
+                    return True
+        return super().eventFilter(objeto, evento)
 
     def _fila_seleccionada(self):
         filas = self.tabla.selectionModel().selectedRows()
@@ -165,6 +193,8 @@ class DialogoBuscarProducto(QDialog):
             f"Categoría: {categoria}<br>"
             f"Precio: {formatear_moneda(producto.precio or 0)} | "
             f"Stock: {formatear_cantidad(producto.stock or 0)} | {revision}"
+            "<br><small>↑/↓ navegar · Enter agregar · "
+            "Esc volver al buscador</small>"
         )
 
     def _aceptar(self, _fila=None, _columna=None):

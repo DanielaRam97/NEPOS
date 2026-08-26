@@ -11,7 +11,6 @@ from database.modelos import (
 )
 from services.producto_service import ErrorProducto, ROLES_GESTION_PRODUCTOS
 from services.configuracion_service import obtener_decimal
-from services.iva_service import iva_categoria_formateado
 
 
 MODOS_IMPORTACION = {
@@ -68,15 +67,22 @@ def _indice_encabezados(fila):
             (disponibles[alias] for alias in aliases if alias in disponibles),
             None,
         )
-    faltantes = [campo for campo in ("CODIGO", "PRODUCTO", "CATEGORIA", "COSTO") if indices[campo] is None]
+    faltantes = [
+        campo
+        for campo in ("CODIGO", "PRODUCTO")
+        if indices[campo] is None
+    ]
     if faltantes:
         raise ErrorProducto(
             "Faltan columnas obligatorias: " + ", ".join(faltantes)
         )
-    if indices["PRECIO"] is None and indices["INCREMENTO"] is None:
+    if indices["PRECIO"] is None and not (
+        indices["COSTO"] is not None
+        and indices["INCREMENTO"] is not None
+    ):
         raise ErrorProducto(
-            "Falta PRECIO DE VENTA. También se acepta INCREMENTO "
-            "en archivos anteriores."
+            "Falta la columna obligatoria PRECIO DE VENTA. En archivos "
+            "anteriores también se acepta COSTO junto con INCREMENTO."
         )
     return indices
 
@@ -100,6 +106,19 @@ def _numero(valor, nombre, numero_fila, por_defecto=0.0):
 
 def _booleano(valor):
     return _texto(valor).upper() in ("SI", "SÍ", "TRUE", "VERDADERO", "1", "X")
+
+
+def _iva_formateado(valor, por_defecto="21%"):
+    texto = _texto(valor) or _texto(por_defecto) or "21%"
+    try:
+        tasa = float(texto.replace("%", "").replace(",", "."))
+    except ValueError as error:
+        raise ErrorProducto("el IVA debe ser 10,5 o 21") from error
+    if abs(tasa - 10.5) < 0.001:
+        return "10.5%"
+    if abs(tasa - 21.0) < 0.001:
+        return "21%"
+    raise ErrorProducto("el IVA debe ser 10,5 o 21")
 
 
 def _validar_permiso(db, usuario_id):
@@ -166,7 +185,14 @@ def analizar_excel(ruta):
             try:
                 codigo = _texto(_valor(fila, indices, "CODIGO"))
                 descripcion = _texto(_valor(fila, indices, "PRODUCTO"))
-                categoria_nombre = _texto(_valor(fila, indices, "CATEGORIA")).upper()
+                categoria_original = _texto(
+                    _valor(fila, indices, "CATEGORIA")
+                )
+                categoria_nombre = (
+                    categoria_original.upper()
+                    if categoria_original
+                    else "SIN CATEGORÍA"
+                )
                 proveedor_nombre = _texto(_valor(fila, indices, "PROVEEDOR")).upper()
                 grupo_precio_nombre = _texto(
                     _valor(fila, indices, "GRUPO_PRECIO")
@@ -177,8 +203,6 @@ def analizar_excel(ruta):
                     raise ErrorProducto(f"Fila {numero_fila}: el código es obligatorio.")
                 if not descripcion:
                     raise ErrorProducto(f"Fila {numero_fila}: el producto es obligatorio.")
-                if not categoria_nombre:
-                    raise ErrorProducto(f"Fila {numero_fila}: la categoría es obligatoria.")
                 if codigo in codigos_archivo:
                     resultado.duplicados_omitidos += 1
                     continue
@@ -226,8 +250,21 @@ def analizar_excel(ruta):
                     if incremento > 1:
                         incremento /= 100
                     precio = round(costo * (1 + incremento), 2)
+                if precio <= 0:
+                    raise ErrorProducto(
+                        f"Fila {numero_fila}: el precio de venta debe ser mayor que 0."
+                    )
                 stock = _numero(_valor(fila, indices, "STOCK"), "el stock", numero_fila)
                 pesable = _booleano(_valor(fila, indices, "PESABLE"))
+                try:
+                    iva = _iva_formateado(
+                        _valor(fila, indices, "IVA"),
+                        categoria.iva if categoria else iva_default,
+                    )
+                except ErrorProducto as error:
+                    raise ErrorProducto(
+                        f"Fila {numero_fila}: {error}."
+                    ) from error
 
                 if plu and plu in plus_existentes and codigo not in codigos_existentes:
                     raise ErrorProducto(
@@ -247,15 +284,24 @@ def analizar_excel(ruta):
                     "descripcion": descripcion,
                     "categoria_id": categoria.id if categoria else None,
                     "categoria_nombre": categoria_nombre,
+                    "categoria_especificada": bool(categoria_original),
                     "proveedor_id": proveedor.id if proveedor else None,
                     "proveedor_nombre": proveedor_nombre or None,
                     "costo": costo,
+                    "costo_especificado": (
+                        indices["COSTO"] is not None
+                        and _valor(fila, indices, "COSTO") not in (None, "")
+                    ),
                     "incremento": incremento,
                     "precio": precio,
                     "stock": stock,
-                    "iva": _texto(_valor(fila, indices, "IVA")) or (
-                        categoria.iva if categoria else iva_default
+                    "iva": iva,
+                    "proveedor_especificado": (
+                        indices["PROVEEDOR"] is not None
                     ),
+                    "pesable_especificado": indices["PESABLE"] is not None,
+                    "plu_especificado": indices["PLU"] is not None,
+                    "grupo_especificado": indices["GRUPO_PRECIO"] is not None,
                     "pesable": pesable,
                     "plu": plu,
                     "grupo_precio_id": (
@@ -299,7 +345,7 @@ def importar_excel(ruta, modo, usuario_id):
             if not categoria:
                 categoria = Categoria(
                     nombre=datos["categoria_nombre"],
-                    iva=iva_categoria_formateado(datos["categoria_nombre"]),
+                    iva=datos["iva"],
                 )
                 db.add(categoria)
                 db.flush()
@@ -327,15 +373,26 @@ def importar_excel(ruta, modo, usuario_id):
 
             if producto:
                 producto.descripcion = datos["descripcion"]
-                producto.categoria_id = categoria.id
-                producto.proveedor_id = proveedor.id if proveedor else None
-                producto.costo = datos["costo"]
-                producto.incremento = datos["incremento"]
+                if datos["categoria_especificada"]:
+                    producto.categoria_id = categoria.id
+                    producto.iva = categoria.iva
+                if datos["proveedor_especificado"]:
+                    producto.proveedor_id = proveedor.id if proveedor else None
+                if datos["costo_especificado"]:
+                    producto.costo = datos["costo"]
                 producto.precio = datos["precio"]
-                producto.grupo_precio_id = datos["grupo_precio_id"]
-                producto.iva = iva_categoria_formateado(categoria.nombre)
-                producto.pesable = datos["pesable"]
-                producto.plu = datos["plu"]
+                costo_actual = float(producto.costo or 0)
+                producto.incremento = (
+                    round((float(producto.precio) / costo_actual) - 1, 4)
+                    if costo_actual > 0
+                    else 0
+                )
+                if datos["grupo_especificado"]:
+                    producto.grupo_precio_id = datos["grupo_precio_id"]
+                if datos["pesable_especificado"]:
+                    producto.pesable = datos["pesable"]
+                if datos["plu_especificado"]:
+                    producto.plu = datos["plu"]
                 if modo == "ACTUALIZAR_SUMAR_STOCK":
                     producto.stock = (producto.stock or 0) + datos["stock"]
                 actualizados += 1
@@ -350,7 +407,7 @@ def importar_excel(ruta, modo, usuario_id):
                     incremento=datos["incremento"],
                     precio=datos["precio"],
                     stock=datos["stock"],
-                    iva=iva_categoria_formateado(categoria.nombre),
+                    iva=categoria.iva,
                     pesable=datos["pesable"],
                     activo=1,
                     grupo_precio_id=datos["grupo_precio_id"],

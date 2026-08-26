@@ -6,9 +6,12 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -76,12 +79,22 @@ class DialogoPago(QDialog):
 
         self.setWindowTitle("Confirmar cobro")
         self.setModal(True)
-        self.setMinimumSize(620, 440)
+        # El modo combinado necesita más altura que el cobro simple. Con una
+        # ventana demasiado baja Qt comprimía el QGridLayout y superponía los
+        # combos y los importes.
+        self.resize(780, 720)
+        self.setMinimumSize(520, 520)
         self.setStyleSheet(
             """
             QDialog {
                 background: #f4f6f8;
                 color: #172033;
+            }
+
+            QScrollArea#scroll_pago,
+            QWidget#contenido_pago {
+                background: #f4f6f8;
+                border: none;
             }
 
             QLabel {
@@ -98,8 +111,24 @@ class DialogoPago(QDialog):
 
             QLabel#etiqueta_formulario {
                 font-size: 13px;
-                font-weight: 600;
+                font-weight: 700;
                 color: #334155;
+            }
+
+            QLabel#ayuda_pago {
+                color: #64748b;
+                font-size: 12px;
+                padding: 0 2px 4px 2px;
+            }
+
+            QLabel#distribucion_pago {
+                background: #e8f7ee;
+                color: #08783a;
+                border: 1px solid #a8dfbd;
+                border-radius: 7px;
+                padding: 9px 12px;
+                font-size: 13px;
+                font-weight: 800;
             }
 
             QFrame#tarjeta_pago {
@@ -109,7 +138,7 @@ class DialogoPago(QDialog):
             }
 
             QLineEdit, QComboBox {
-                min-height: 25px;
+                min-height: 28px;
                 background: #ffffff;
                 color: #172033;
                 border: 1px solid #aeb8c6;
@@ -180,9 +209,33 @@ class DialogoPago(QDialog):
         self._actualizar_resumen()
 
     def _armar_interfaz(self):
-            layout = QVBoxLayout(self)
+            raiz = QVBoxLayout(self)
+            raiz.setContentsMargins(0, 0, 0, 0)
+            raiz.setSpacing(0)
+
+            self.scroll_pago = QScrollArea()
+            self.scroll_pago.setObjectName("scroll_pago")
+            self.scroll_pago.setWidgetResizable(True)
+            self.scroll_pago.setHorizontalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            self.scroll_pago.setVerticalScrollBarPolicy(
+                Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+
+            self.contenido_pago = QWidget()
+            self.contenido_pago.setObjectName("contenido_pago")
+            self.scroll_pago.setWidget(self.contenido_pago)
+            raiz.addWidget(self.scroll_pago)
+
+            layout = QVBoxLayout(self.contenido_pago)
             layout.setContentsMargins(22, 18, 22, 18)
             layout.setSpacing(12)
+            # El contenido nunca se comprime por debajo del tamaño requerido
+            # por sus controles. Si la pantalla es baja aparece el scroll.
+            layout.setSizeConstraint(
+                QLayout.SizeConstraint.SetMinimumSize
+            )
 
             # ---------------------------------------------------------
             # Título
@@ -214,13 +267,23 @@ class DialogoPago(QDialog):
             # ---------------------------------------------------------
             tarjeta_pago = QFrame()
             tarjeta_pago.setObjectName("tarjeta_pago")
+            tarjeta_pago.setSizePolicy(
+                QSizePolicy.Policy.Expanding,
+                QSizePolicy.Policy.Preferred,
+            )
 
             grid = QGridLayout(tarjeta_pago)
-            grid.setContentsMargins(18, 14, 18, 14)
+            grid.setContentsMargins(20, 16, 20, 18)
             grid.setHorizontalSpacing(14)
-            grid.setVerticalSpacing(10)
-            grid.setColumnMinimumWidth(0, 155)
+            grid.setVerticalSpacing(9)
+            grid.setColumnMinimumWidth(0, 175)
             grid.setColumnStretch(1, 1)
+
+            titulo_medios = QLabel("FORMA DE PAGO")
+            titulo_medios.setStyleSheet(
+                "color: #172033; font-size: 14px; font-weight: 900;"
+            )
+            grid.addWidget(titulo_medios, 0, 0, 1, 2)
 
             self.check_combinado = QCheckBox(
                 "Combinar dos medios de pago"
@@ -232,7 +295,15 @@ class DialogoPago(QDialog):
             self.check_combinado.stateChanged.connect(
                 self._cambiar_modo
             )
-            grid.addWidget(self.check_combinado, 0, 0, 1, 2)
+            grid.addWidget(self.check_combinado, 1, 0, 1, 2)
+
+            ayuda_combinado = QLabel(
+                "Ingresá el importe del primer medio; el segundo se "
+                "calcula automáticamente."
+            )
+            ayuda_combinado.setObjectName("ayuda_pago")
+            ayuda_combinado.setWordWrap(True)
+            grid.addWidget(ayuda_combinado, 2, 0, 1, 2)
 
             # Primer medio
             self.etiqueta_medio_1 = QLabel("Medio de pago:")
@@ -259,8 +330,8 @@ class DialogoPago(QDialog):
                 self._cambio_medio_2
             )
 
-            grid.addWidget(self.etiqueta_medio_1, 1, 0)
-            grid.addWidget(self.combo_medio_1, 1, 1)
+            grid.addWidget(self.etiqueta_medio_1, 3, 0)
+            grid.addWidget(self.combo_medio_1, 3, 1)
 
             # Segundo medio
             self.etiqueta_medio_2 = QLabel("Segundo medio:")
@@ -270,8 +341,8 @@ class DialogoPago(QDialog):
                 Qt.AlignmentFlag.AlignVCenter
             )
 
-            grid.addWidget(self.etiqueta_medio_2, 2, 0)
-            grid.addWidget(self.combo_medio_2, 2, 1)
+            grid.addWidget(self.etiqueta_medio_2, 4, 0)
+            grid.addWidget(self.combo_medio_2, 4, 1)
 
             # Importe del primer medio
             self.etiqueta_importe_1 = QLabel("Importe primer medio:")
@@ -289,8 +360,8 @@ class DialogoPago(QDialog):
                 self._actualizar_resumen
             )
 
-            grid.addWidget(self.etiqueta_importe_1, 3, 0)
-            grid.addWidget(self.campo_importe_1, 3, 1)
+            grid.addWidget(self.etiqueta_importe_1, 5, 0)
+            grid.addWidget(self.campo_importe_1, 5, 1)
 
             # Importe automático del segundo medio
             self.etiqueta_titulo_importe_2 = QLabel(
@@ -315,8 +386,23 @@ class DialogoPago(QDialog):
                 """
             )
 
-            grid.addWidget(self.etiqueta_titulo_importe_2, 4, 0)
-            grid.addWidget(self.etiqueta_importe_2, 4, 1)
+            grid.addWidget(self.etiqueta_titulo_importe_2, 6, 0)
+            grid.addWidget(self.etiqueta_importe_2, 6, 1)
+
+            self.etiqueta_distribucion = QLabel()
+            self.etiqueta_distribucion.setObjectName(
+                "distribucion_pago"
+            )
+            self.etiqueta_distribucion.setAlignment(
+                Qt.AlignmentFlag.AlignCenter
+            )
+            grid.addWidget(
+                self.etiqueta_distribucion,
+                7,
+                0,
+                1,
+                2,
+            )
 
             # Cuotas
             self.etiqueta_cuotas = QLabel("Cuotas:")
@@ -332,8 +418,8 @@ class DialogoPago(QDialog):
                 self._actualizar_resumen
             )
 
-            grid.addWidget(self.etiqueta_cuotas, 5, 0)
-            grid.addWidget(self.combo_cuotas, 5, 1)
+            grid.addWidget(self.etiqueta_cuotas, 8, 0)
+            grid.addWidget(self.combo_cuotas, 8, 1)
 
             self.check_cigarrillos_efectivo = QCheckBox(
                 "Cobrar los cigarrillos en efectivo, sin recargo"
@@ -343,11 +429,14 @@ class DialogoPago(QDialog):
             )
             grid.addWidget(
                 self.check_cigarrillos_efectivo,
-                6,
+                9,
                 0,
                 1,
                 2,
             )
+
+            self.tarjeta_medios_pago = tarjeta_pago
+            self.ayuda_pago_combinado = ayuda_combinado
 
             layout.addWidget(tarjeta_pago)
 
@@ -534,6 +623,8 @@ class DialogoPago(QDialog):
         if self._es_combinado():
             self._cambio_medio_1()
         self._actualizar_resumen()
+        if self._es_combinado():
+            self.campo_importe_1.setFocus()
 
     def _calcular_importes(self):
         medios = set(self._medios())
@@ -593,12 +684,36 @@ class DialogoPago(QDialog):
     def _actualizar_resumen(self, _valor=None):
         combinado = self._es_combinado()
         medios = self._medios()
+        nombre_primero = MEDIOS.get(medios[0], medios[0])
+        nombre_segundo = (
+            MEDIOS.get(medios[1], medios[1])
+            if combinado
+            else ""
+        )
+
+        self.etiqueta_medio_1.setText(
+            "Primer medio:"
+            if combinado
+            else "Medio de pago:"
+        )
+        self.etiqueta_importe_1.setText(
+            f"Importe en {nombre_primero}:"
+        )
+        self.etiqueta_titulo_importe_2.setText(
+            f"Importe en {nombre_segundo}:"
+        )
+        self.campo_importe_1.setPlaceholderText(
+            f"Monto a cobrar en {nombre_primero.lower()}"
+        )
+
         self.combo_medio_2.setVisible(combinado)
         self.etiqueta_medio_2.setVisible(combinado)
         self.campo_importe_1.setVisible(combinado)
         self.etiqueta_importe_1.setVisible(combinado)
         self.etiqueta_importe_2.setVisible(combinado)
         self.etiqueta_titulo_importe_2.setVisible(combinado)
+        self.etiqueta_distribucion.setVisible(combinado)
+        self.ayuda_pago_combinado.setVisible(combinado)
 
         hay_efectivo = "EFECTIVO" in medios
         hay_electronico = bool(set(medios) & MEDIOS_ELECTRONICOS)
@@ -658,11 +773,48 @@ class DialogoPago(QDialog):
 
         if combinado:
             segundo = self._importe_segundo(total)
-            self.etiqueta_importe_2.setText(
-                "Monto inválido"
-                if segundo is None
-                else formatear_moneda(segundo)
-            )
+            try:
+                primero = self._convertir_monto(
+                    self.campo_importe_1.text()
+                )
+            except ValueError:
+                primero = None
+
+            if segundo is None or primero is None:
+                self.etiqueta_importe_2.setText("Monto inválido")
+                self.etiqueta_importe_2.setStyleSheet(
+                    "background:#fff1f0; color:#b42318; "
+                    "border:1px solid #efb4ae; border-radius:7px; "
+                    "padding:9px 10px; font-weight:800;"
+                )
+                self.etiqueta_distribucion.setText(
+                    "Revisá el importe del primer medio"
+                )
+            else:
+                self.etiqueta_importe_2.setText(
+                    formatear_moneda(segundo)
+                )
+                self.etiqueta_importe_2.setStyleSheet(
+                    "background:#eef2f6; color:#172033; "
+                    "border:1px solid #cbd5e1; border-radius:7px; "
+                    "padding:9px 10px; font-weight:800;"
+                )
+                self.etiqueta_distribucion.setText(
+                    f"{nombre_primero}: {formatear_moneda(primero)}"
+                    "   +   "
+                    f"{nombre_segundo}: {formatear_moneda(segundo)}"
+                    "   =   "
+                    f"{formatear_moneda(total)}"
+                )
+
+        # Fuerza a Qt a recalcular el alto de la tarjeta cuando aparecen o
+        # desaparecen filas (pago combinado, cuotas o cigarrillos).
+        self.tarjeta_medios_pago.layout().invalidate()
+        self.tarjeta_medios_pago.layout().activate()
+        self.tarjeta_medios_pago.updateGeometry()
+        self.contenido_pago.layout().invalidate()
+        self.contenido_pago.layout().activate()
+        self.contenido_pago.updateGeometry()
 
         if hay_efectivo:
             try:

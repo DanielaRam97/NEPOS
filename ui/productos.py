@@ -6,7 +6,7 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
     QFileDialog, QInputDialog, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QStyle, QVBoxLayout, QWidget,
+    QDialog, QDialogButtonBox, QFormLayout, QStyle, QVBoxLayout, QWidget,
 )
 
 from services.producto_service import (
@@ -218,6 +218,51 @@ QPushButton {
 QPushButton:hover { background-color: #d6dde6; }
 QPushButton:pressed { background-color: #c8d1dc; }
 """
+
+
+class DialogoNuevaCategoria(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Nueva categoría")
+        self.setModal(True)
+        self.setMinimumWidth(390)
+
+        layout = QVBoxLayout(self)
+        descripcion = QLabel(
+            "Ingresá el nombre y elegí la alícuota que se aplicará "
+            "a los productos de esta categoría."
+        )
+        descripcion.setWordWrap(True)
+        layout.addWidget(descripcion)
+
+        formulario = QFormLayout()
+        self.campo_nombre = QLineEdit()
+        self.campo_nombre.setPlaceholderText("Ej.: Carnicería")
+        self.combo_iva = QComboBox()
+        self.combo_iva.addItem("21%", 21.0)
+        self.combo_iva.addItem("10,5%", 10.5)
+        formulario.addRow("Nombre:", self.campo_nombre)
+        formulario.addRow("IVA:", self.combo_iva)
+        layout.addLayout(formulario)
+
+        botones = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save
+            | QDialogButtonBox.StandardButton.Cancel
+        )
+        botones.button(
+            QDialogButtonBox.StandardButton.Save
+        ).setText("Crear categoría")
+        botones.button(
+            QDialogButtonBox.StandardButton.Cancel
+        ).setText("Cancelar")
+        botones.accepted.connect(self.accept)
+        botones.rejected.connect(self.reject)
+        layout.addWidget(botones)
+        self.campo_nombre.returnPressed.connect(self.accept)
+        self.campo_nombre.setFocus()
+
+    def datos(self):
+        return self.campo_nombre.text(), self.combo_iva.currentData()
 
 
 class ItemNumerico(QTableWidgetItem):
@@ -623,18 +668,13 @@ class VentanaProductos(QWidget):
             )
             return
 
-        nombre, aceptado = QInputDialog.getText(
-            self,
-            "Nueva categoría",
-            "Nombre de la categoría:\n\n"
-            "Carnicería y Panadería usarán IVA 10,5%.\n"
-            "Las demás categorías usarán IVA 21%.",
-        )
-        if not aceptado:
+        dialogo = DialogoNuevaCategoria(self)
+        if dialogo.exec() != QDialog.DialogCode.Accepted:
             return
+        nombre, iva = dialogo.datos()
 
         try:
-            categoria = crear_categoria(nombre, self.usuario.id)
+            categoria = crear_categoria(nombre, iva, self.usuario.id)
         except ErrorProducto as error:
             QMessageBox.warning(
                 self,
@@ -850,6 +890,29 @@ class VentanaProductos(QWidget):
                 "Sin permiso",
                 "Solamente ADMIN o SUPERVISOR pueden importar productos.",
             )
+            return
+        continuar = QMessageBox.question(
+            self,
+            "Formato del Excel",
+            "COLUMNAS MÍNIMAS RECOMENDADAS\n"
+            "A: CODIGO\n"
+            "B: DESCRIPCION\n"
+            "C: PRECIO DE VENTA\n\n"
+            "COLUMNAS OPCIONALES\n"
+            "CATEGORIA, IVA, COSTO, STOCK, PROVEEDOR, PESABLE, PLU y GRUPO.\n\n"
+            "El orden no es obligatorio: NEPOS reconoce las columnas por "
+            "el encabezado. Si faltan datos en un producto nuevo:\n"
+            "• Costo y stock quedan en 0.\n"
+            "• Categoría queda como SIN CATEGORÍA con IVA 21%.\n"
+            "• Proveedor, PLU y grupo quedan vacíos.\n"
+            "• PESABLE queda desactivado.\n\n"
+            "En una actualización, las columnas opcionales ausentes no "
+            "sobrescriben los datos existentes.\n\n"
+            "¿Seleccionar el archivo ahora?",
+            QMessageBox.StandardButton.Yes
+            | QMessageBox.StandardButton.No,
+        )
+        if continuar != QMessageBox.StandardButton.Yes:
             return
         ruta, _ = QFileDialog.getOpenFileName(
             self,
