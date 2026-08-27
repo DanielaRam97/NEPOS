@@ -17,12 +17,24 @@ def resumen_periodo(fecha_desde=None, fecha_hasta=None):
         ganancia = 0.0
         unidades = 0.0
 
+        lineas_sin_costo_historico = 0
+
         for venta in ventas:
             for item in venta.items:
-                producto = db.query(Producto).get(item.producto_id)
-                costo_unitario = producto.costo if producto else 0
-                ganancia += item.subtotal - (costo_unitario * item.cantidad)
-                unidades += item.cantidad
+                costo_unitario = item.costo_unitario
+
+                if costo_unitario is None:
+                    lineas_sin_costo_historico += 1
+                else:
+                    ganancia += (
+                        float(item.subtotal or 0)
+                        - (
+                            float(costo_unitario)
+                            * float(item.cantidad or 0)
+                        )
+                    )
+
+                unidades += float(item.cantidad or 0)
 
         return {
             "venta_bruta": round(venta_bruta, 2),
@@ -33,6 +45,8 @@ def resumen_periodo(fecha_desde=None, fecha_hasta=None):
                 2,
             ) if ventas else 0.0,
             "ganancia_estimada": round(ganancia, 2),
+            "lineas_sin_costo_historico": lineas_sin_costo_historico,
+            "rentabilidad_completa": lineas_sin_costo_historico == 0,
         }
     finally:
         db.close()

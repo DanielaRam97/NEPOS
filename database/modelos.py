@@ -176,6 +176,10 @@ class DetalleVenta(Base):
     producto_id = Column(Integer, ForeignKey("productos.id"))
     cantidad = Column(Numeric(12, 3, asdecimal=False), nullable=False)
     precio_unitario = Column(Numeric(12, 2, asdecimal=False), nullable=False)
+    costo_unitario = Column(
+        Numeric(12, 2, asdecimal=False),
+        nullable=True,
+    )
     subtotal = Column(Numeric(12, 2, asdecimal=False), nullable=False)
     iva_tasa = Column(Numeric(5, 2, asdecimal=False), nullable=False, default=21)
 

@@ -90,11 +90,13 @@ class VentanaDashboard(QWidget):
         self.kpi_transacciones = self._crear_kpi("Transacciones")
         self.kpi_ticket = self._crear_kpi("Ticket promedio")
         self.kpi_unidades = self._crear_kpi("Unidades vendidas")
+        self.kpi_margen = self._crear_kpi("Margen bruto")
 
         grilla_kpis.addWidget(self.kpi_ventas, 0, 0)
         grilla_kpis.addWidget(self.kpi_transacciones, 0, 1)
         grilla_kpis.addWidget(self.kpi_ticket, 0, 2)
         grilla_kpis.addWidget(self.kpi_unidades, 0, 3)
+        grilla_kpis.addWidget(self.kpi_margen, 0, 4)
 
         layout.addLayout(grilla_kpis)
 
@@ -155,10 +157,7 @@ class VentanaDashboard(QWidget):
 
         layout.addLayout(contenido, 1)
 
-        self.etiqueta_aviso = QLabel(
-            "La rentabilidad no se muestra todavía porque falta guardar "
-            "el costo unitario histórico en cada venta."
-        )
+        self.etiqueta_aviso = QLabel()
         self.etiqueta_aviso.setWordWrap(True)
         self.etiqueta_aviso.setStyleSheet(
             "color: #92400e; background: #fffbeb; "
@@ -244,6 +243,36 @@ class VentanaDashboard(QWidget):
             self.kpi_unidades,
             formatear_cantidad(resumen["unidades"]),
         )
+
+        if resumen["rentabilidad_completa"]:
+            self._setear_kpi(
+                self.kpi_margen,
+                formatear_moneda(resumen["ganancia_estimada"]),
+            )
+            self.etiqueta_aviso.setText(
+                "Margen bruto calculado con el costo histórico "
+                "guardado en cada venta."
+            )
+            self.etiqueta_aviso.setStyleSheet(
+                "color: #166534; background: #f0fdf4; "
+                "border: 1px solid #86efac; border-radius: 7px; "
+                "padding: 8px; font-weight: 600;"
+            )
+        else:
+            self._setear_kpi(
+                self.kpi_margen,
+                "Datos incompletos",
+            )
+            self.etiqueta_aviso.setText(
+                "El margen no se muestra porque este período contiene "
+                f"{resumen['lineas_sin_costo_historico']} líneas de ventas "
+                "anteriores sin costo histórico."
+            )
+            self.etiqueta_aviso.setStyleSheet(
+                "color: #92400e; background: #fffbeb; "
+                "border: 1px solid #fcd34d; border-radius: 7px; "
+                "padding: 8px; font-weight: 600;"
+            )
 
         self.tabla_ranking.setRowCount(len(ranking))
         for fila, producto in enumerate(ranking):

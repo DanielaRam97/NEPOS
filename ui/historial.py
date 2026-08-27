@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from utils.rutas import ruta_icono
 
 from PySide6.QtCore import QDate, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QPixmap
+from PySide6.QtGui import QColor, QKeySequence, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -14,7 +14,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
-    QSplitter,
+    QScrollArea,
     QStyle,
     QTableWidget,
     QTableWidgetItem,
@@ -228,13 +228,24 @@ class VentanaHistorial(QWidget):
         layout.addWidget(filtros_frame)
 
         # =====================================================
-        # DIVISOR ENTRE VENTAS Y DETALLE
+        # CONTENIDO VERTICAL CON DESPLAZAMIENTO
         # =====================================================
-        self.divisor = QSplitter(
-            Qt.Orientation.Vertical
+        self.area_contenido = QScrollArea()
+        self.area_contenido.setWidgetResizable(True)
+        self.area_contenido.setFrameShape(
+            QFrame.Shape.NoFrame
         )
-        self.divisor.setChildrenCollapsible(False)
 
+        self.contenido_historial = QWidget()
+        self.contenido_layout = QVBoxLayout(
+            self.contenido_historial
+        )
+        self.contenido_layout.setContentsMargins(0, 0, 0, 0)
+        self.contenido_layout.setSpacing(10)
+
+        self.area_contenido.setWidget(
+            self.contenido_historial
+        )
         # =====================================================
         # TABLA DE VENTAS
         # =====================================================
@@ -292,7 +303,10 @@ class VentanaHistorial(QWidget):
         )
 
         ventas_layout.addWidget(self.tabla_ventas)
-        self.divisor.addWidget(ventas_frame)
+        self.tabla_ventas.setMinimumHeight(280)
+        self.tabla_ventas.setMaximumHeight(360)
+
+        self.contenido_layout.addWidget(ventas_frame)
 
         # =====================================================
         # DETALLE DE LA VENTA
@@ -359,14 +373,41 @@ class VentanaHistorial(QWidget):
             )
 
         detalle_layout.addLayout(cabecera_detalle)
+        self.etiqueta_resumen_venta = QLabel("")
+        self.etiqueta_resumen_venta.setWordWrap(True)
+        self.etiqueta_resumen_venta.setObjectName(
+            "resumen_venta_historial"
+        )
+        self.etiqueta_resumen_venta.setStyleSheet(
+            """
+            QLabel#resumen_venta_historial {
+                background: #F5F5F5;
+                border: 1px solid #D9D9D9;
+                border-radius: 6px;
+                color: #333333;
+                padding: 8px;
+            }
+            """
+        )
+        detalle_layout.addWidget(self.etiqueta_resumen_venta)
 
-        self.tabla_detalle = QTableWidget(0, 4)
+        self.etiqueta_resumen_venta = QLabel()
+        self.etiqueta_resumen_venta.setWordWrap(True)
+        self.etiqueta_resumen_venta.setStyleSheet(
+            "background: #f8fafc; border: 1px solid #cbd5e1; "
+            "border-radius: 7px; padding: 9px; color: #334155;"
+        )
+        detalle_layout.addWidget(self.etiqueta_resumen_venta)
+
+        self.tabla_detalle = QTableWidget(0, 6)
         self.tabla_detalle.setAlternatingRowColors(True)
         self.tabla_detalle.setHorizontalHeaderLabels(
             [
                 "PRODUCTO",
+                "CATEGORÍA",
                 "CANTIDAD",
                 "PRECIO",
+                "IVA",
                 "SUBTOTAL",
             ]
         )
@@ -391,13 +432,21 @@ class VentanaHistorial(QWidget):
         self.tabla_detalle.setSortingEnabled(True)
 
         detalle_layout.addWidget(self.tabla_detalle)
-        self.divisor.addWidget(detalle_frame)
+        self.detalle_frame = detalle_frame
+        self.tabla_detalle.setMinimumHeight(220)
 
-        self.divisor.setStretchFactor(0, 3)
-        self.divisor.setStretchFactor(1, 2)
-        self.divisor.setSizes([350, 250])
+        self.contenido_layout.addWidget(detalle_frame)
+        self.contenido_layout.addStretch()
 
-        layout.addWidget(self.divisor, 1)
+        layout.addWidget(self.area_contenido, 1)
+
+        self.atajo_cerrar_detalle = QShortcut(
+            QKeySequence(Qt.Key.Key_Escape),
+            self,
+        )
+        self.atajo_cerrar_detalle.activated.connect(
+            self._cerrar_detalle_con_escape
+        )
 
         QTimer.singleShot(
             0,
@@ -643,6 +692,152 @@ class VentanaHistorial(QWidget):
             f"{estado}"
         )
 
+        pagos = []
+
+        if float(venta.efectivo or 0) > 0:
+            pagos.append(
+                f"Efectivo: {formatear_moneda(venta.efectivo)}"
+            )
+
+        if float(venta.qr or 0) > 0:
+            pagos.append(
+                f"QR: {formatear_moneda(venta.qr)}"
+            )
+
+        if float(venta.debito or 0) > 0:
+            pagos.append(
+                f"Débito: {formatear_moneda(venta.debito)}"
+            )
+
+        if float(venta.credito or 0) > 0:
+            texto_credito = (
+                f"Crédito: {formatear_moneda(venta.credito)}"
+            )
+
+            if venta.cuotas:
+                texto_credito += f" ({venta.cuotas} cuota/s)"
+
+            pagos.append(texto_credito)
+
+        resumen = [
+            f"Subtotal: {formatear_moneda(venta.subtotal)}",
+        ]
+
+        descuento = float(venta.descuento_promociones or 0)
+        if descuento > 0:
+            resumen.append(
+                f"Descuentos: -{formatear_moneda(descuento)}"
+            )
+
+        recargo = float(venta.recargo or 0)
+        if recargo > 0:
+            resumen.append(
+                f"Recargos: {formatear_moneda(recargo)}"
+            )
+
+        resumen.append(f"Total: {formatear_moneda(venta.total)}")
+
+        vuelto = float(venta.vuelto or 0)
+        if vuelto > 0:
+            resumen.append(f"Vuelto: {formatear_moneda(vuelto)}")
+
+        texto_resumen = " · ".join(resumen)
+
+        if pagos:
+            texto_resumen += "\nPagos: " + " · ".join(pagos)
+
+        if venta.promociones_aplicadas:
+            promociones = []
+
+            for promocion in venta.promociones_aplicadas:
+                veces = int(promocion.veces or 1)
+                ahorro = float(promocion.ahorro or 0)
+
+                texto_promocion = promocion.nombre
+
+                if veces > 1:
+                    texto_promocion += f" × {veces}"
+
+                if ahorro > 0:
+                    texto_promocion += (
+                        f" (-{formatear_moneda(ahorro)})"
+                    )
+
+                promociones.append(texto_promocion)
+
+            texto_resumen += (
+                "\nPromociones: " + " · ".join(promociones)
+            )
+
+        if venta.anulada:
+            anulada_por = (
+                venta.anulada_por.nombre
+                if venta.anulada_por
+                else "Sin registro"
+            )
+            motivo = venta.motivo_anulacion or "Sin motivo registrado"
+
+            texto_resumen += (
+                f"\nANULADA por {anulada_por}. "
+                f"Motivo: {motivo}"
+            )
+
+        self.etiqueta_resumen_venta.setText(texto_resumen)
+
+        cajero = venta.usuario.nombre if venta.usuario else "—"
+        turno = venta.turno_rel.turno if venta.turno_rel else "—"
+
+        medios = []
+        for nombre, importe in (
+            ("Efectivo", venta.efectivo),
+            ("QR", venta.qr),
+            ("Débito", venta.debito),
+            ("Crédito", venta.credito),
+        ):
+            if float(importe or 0) > 0:
+                medios.append(
+                    f"{nombre}: {formatear_moneda(importe)}"
+                )
+
+        if venta.cuotas:
+            medios.append(f"Cuotas: {venta.cuotas}")
+
+        promociones = [
+            promocion.nombre
+            for promocion in venta.promociones_aplicadas
+        ]
+
+        anulacion = "—"
+        if venta.anulada:
+            usuario_anulacion = (
+                venta.anulada_por.nombre
+                if venta.anulada_por
+                else "Usuario no disponible"
+            )
+            fecha_anulacion = (
+                venta.fecha_anulacion.strftime("%d/%m/%Y %H:%M")
+                if venta.fecha_anulacion
+                else "—"
+            )
+            anulacion = (
+                f"{fecha_anulacion} · {usuario_anulacion} · "
+                f"{venta.motivo_anulacion or 'Sin motivo'}"
+            )
+
+        self.etiqueta_resumen_venta.setText(
+            f"Fecha: {venta.fecha.strftime('%d/%m/%Y %H:%M')}  |  "
+            f"Cajero: {cajero}  |  Turno: {turno}\n"
+            f"Pago: {' · '.join(medios) or venta.forma_pago or '—'}  |  "
+            f"Recibido: {formatear_moneda(venta.monto_recibido) if venta.monto_recibido is not None else '—'}  |  "
+            f"Vuelto: {formatear_moneda(venta.vuelto)}\n"
+            f"Subtotal: {formatear_moneda(venta.subtotal)}  |  "
+            f"Descuentos: {formatear_moneda(venta.descuento_promociones)}  |  "
+            f"Recargos: {formatear_moneda(venta.recargo)}  |  "
+            f"Total: {formatear_moneda(venta.total)}\n"
+            f"Promociones: {', '.join(promociones) if promociones else '—'}\n"
+            f"Anulación: {anulacion}"
+        )
+
         self.boton_reimprimir.setEnabled(True)
 
         if self.boton_anular:
@@ -656,21 +851,33 @@ class VentanaHistorial(QWidget):
         )
 
         for fila, detalle in enumerate(venta.items):
+            producto = detalle.producto
+
             descripcion = (
-                detalle.producto.descripcion
-                if detalle.producto
+                producto.descripcion
+                if producto
                 else "(producto eliminado)"
             )
-            cantidad = float(detalle.cantidad or 0)
-            precio = float(
-                detalle.precio_unitario or 0
+
+            categoria = (
+                producto.categoria_rel.nombre
+                if producto and producto.categoria_rel
+                else "-"
             )
+
+            cantidad = float(detalle.cantidad or 0)
+            precio = float(detalle.precio_unitario or 0)
             subtotal = float(detalle.subtotal or 0)
+            iva_tasa = float(detalle.iva_tasa or 0)
 
             valores = [
                 ItemOrdenable(
                     descripcion,
                     descripcion.casefold(),
+                ),
+                ItemOrdenable(
+                    categoria,
+                    categoria.casefold(),
                 ),
                 ItemOrdenable(
                     formatear_cantidad(cantidad),
@@ -681,22 +888,26 @@ class VentanaHistorial(QWidget):
                     precio,
                 ),
                 ItemOrdenable(
+                    f"{iva_tasa:g}%",
+                    iva_tasa,
+                ),
+                ItemOrdenable(
                     formatear_moneda(subtotal),
                     subtotal,
                 ),
             ]
 
-            for columna, item in enumerate(valores):
-                if columna > 0:
-                    item.setTextAlignment(
-                        Qt.AlignmentFlag.AlignCenter
-                    )
-
-                self.tabla_detalle.setItem(
-                    fila,
-                    columna,
-                    item,
+        for columna, item in enumerate(valores):
+            if columna > 1:
+                item.setTextAlignment(
+                    Qt.AlignmentFlag.AlignCenter
                 )
+
+            self.tabla_detalle.setItem(
+                fila,
+                columna,
+                item,
+            )
 
         self.tabla_detalle.setSortingEnabled(True)
 
@@ -704,12 +915,17 @@ class VentanaHistorial(QWidget):
             0,
             self._ajustar_columnas,
         )
+        QTimer.singleShot(
+            0,
+            self._ir_al_detalle,
+        )
 
     def _limpiar_detalle(self):
         self.tabla_detalle.setRowCount(0)
         self.etiqueta_detalle.setText(
             "Seleccioná una venta para consultar su detalle."
         )
+        self.etiqueta_resumen_venta.setText("")
         self.boton_reimprimir.setEnabled(False)
 
         if self.boton_anular:
@@ -748,10 +964,12 @@ class VentanaHistorial(QWidget):
 
         if ancho_detalle > 0:
             proporciones_detalle = (
-                0.58,
-                0.12,
-                0.15,
-                0.15,
+                0.34,
+                0.18,
+                0.11,
+                0.14,
+                0.09,
+                0.14,
             )
             anchos = [
                 int(ancho_detalle * proporcion)
@@ -772,6 +990,19 @@ class VentanaHistorial(QWidget):
             0,
             self._ajustar_columnas,
         )
+
+    def _ir_al_detalle(self):
+        barra = self.area_contenido.verticalScrollBar()
+        barra.setValue(self.detalle_frame.y())
+
+
+    def _cerrar_detalle_con_escape(self):
+        self.tabla_ventas.clearSelection()
+        self._limpiar_detalle()
+        self.tabla_ventas.setFocus()
+    
+        barra = self.area_contenido.verticalScrollBar()
+        barra.setValue(0)
 
     def reimprimir_ticket(self):
         venta = self._venta_seleccionada()

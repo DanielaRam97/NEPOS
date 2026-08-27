@@ -1,8 +1,15 @@
 from datetime import date, datetime, time, timedelta
 
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
+
 from database.conexion import nueva_sesion
-from database.modelos import Venta, DetalleVenta, Usuario, Turno
+from database.modelos import (
+    DetalleVenta,
+    Producto,
+    Turno,
+    Usuario,
+    Venta,
+)
 
 
 def _convertir_fecha(valor, nombre):
@@ -38,7 +45,11 @@ def listar_ventas(fecha_desde=None, fecha_hasta=None, turno_id=None, usuario_id=
             .options(
                 joinedload(Venta.usuario),
                 joinedload(Venta.turno_rel),
-                joinedload(Venta.items).joinedload(DetalleVenta.producto),
+                joinedload(Venta.anulada_por),
+                joinedload(Venta.items)
+                .joinedload(DetalleVenta.producto)
+                .joinedload(Producto.categoria_rel),
+                selectinload(Venta.promociones_aplicadas),
             )
             .order_by(Venta.fecha.desc())
         )

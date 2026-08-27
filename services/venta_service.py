@@ -344,6 +344,7 @@ def registrar_venta(
                     "producto": producto,
                     "cantidad": cantidad,
                     "precio_unitario": float(producto.precio or 0),
+                    "costo_unitario": float(producto.costo or 0),
                     "subtotal": subtotal,
                     "iva_tasa": tasa_iva_producto(producto),
                 }
@@ -467,6 +468,7 @@ def registrar_venta(
                     producto_id=producto.id,
                     cantidad=detalle["cantidad"],
                     precio_unitario=detalle["precio_unitario"],
+                    costo_unitario=detalle["costo_unitario"],
                     subtotal=detalle["subtotal"],
                     iva_tasa=detalle["iva_tasa"],
                 )
