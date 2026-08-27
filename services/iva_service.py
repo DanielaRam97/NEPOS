@@ -26,16 +26,32 @@ def iva_categoria_formateado(nombre):
 
 def tasa_iva_producto(producto):
     categoria = getattr(producto, "categoria_rel", None)
+
+    valor_iva = (
+        getattr(categoria, "iva", None)
+        if categoria
+        else getattr(producto, "iva", None)
+    )
+
+    texto = str(valor_iva or "").replace("%", "")
+    texto = texto.replace(",", ".").strip()
+
+    try:
+        tasa = float(texto)
+    except (TypeError, ValueError):
+        tasa = None
+
+    if tasa is not None:
+        if abs(tasa - IVA_REDUCIDO) < 0.01:
+            return IVA_REDUCIDO
+        if abs(tasa - IVA_GENERAL) < 0.01:
+            return IVA_GENERAL
+
+    # Compatibilidad con categorías antiguas sin IVA definido.
     if categoria:
         return tasa_iva_por_categoria(categoria.nombre)
 
-    texto = str(getattr(producto, "iva", "") or "").replace("%", "")
-    texto = texto.replace(",", ".").strip()
-    try:
-        tasa = float(texto)
-    except ValueError:
-        return IVA_GENERAL
-    return IVA_REDUCIDO if abs(tasa - IVA_REDUCIDO) < 0.01 else IVA_GENERAL
+    return IVA_GENERAL
 
 
 def separar_iva_incluido(total, tasa):

@@ -28,6 +28,10 @@ def resumen_periodo(fecha_desde=None, fecha_hasta=None):
             "venta_bruta": round(venta_bruta, 2),
             "transacciones": len(ventas),
             "unidades": round(unidades, 2),
+            "ticket_promedio": round(
+                venta_bruta / len(ventas),
+                2,
+            ) if ventas else 0.0,
             "ganancia_estimada": round(ganancia, 2),
         }
     finally:

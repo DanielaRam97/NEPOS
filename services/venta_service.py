@@ -504,7 +504,7 @@ def registrar_venta(
                 accion="VENTA_CONFIRMADA",
                 entidad="VENTA",
                 entidad_id=venta.id,
-                nivel="CRITICO",
+                nivel="INFO",
                 detalle={
                     "numero": venta.numero,
                     "forma_pago": forma_pago,

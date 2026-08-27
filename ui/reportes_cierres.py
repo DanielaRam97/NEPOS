@@ -1,9 +1,15 @@
 from datetime import date, timedelta
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QFileDialog
+    QWidget, QVBoxLayout, QHBoxLayout, QComboBox, QLabel,
+    QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
+    QMessageBox, QFileDialog, QInputDialog
 )
-from services.cierre_service import listar_turnos_cerrados, calcular_resumen
+from services.cierre_service import (
+    ErrorCierre,
+    calcular_resumen,
+    listar_turnos_cerrados,
+    registrar_correccion_cierre,
+)
 from services.exportar_service import exportar_cierre_turno_excel, exportar_cierre_turno_pdf
 from utils.formato import formatear_moneda, formatear_cantidad
 
@@ -11,8 +17,9 @@ OPCIONES_PERIODO = ["Todo el historial", "Hoy", "Esta semana", "Este mes"]
 
 
 class VentanaReportesCierres(QWidget):
-    def __init__(self):
+    def __init__(self, usuario):
         super().__init__()
+        self.usuario = usuario
         self.turnos_cargados = []
         self.resumen_seleccionado = None
 
@@ -36,6 +43,12 @@ class VentanaReportesCierres(QWidget):
         layout.addLayout(fila_periodo)
 
         self.tabla = QTableWidget(0, 8)
+        self.tabla.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.tabla.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
         self.tabla.setHorizontalHeaderLabels(
             [
                 "Fecha cierre", "Turno", "Cajero", "Venta bruta",
@@ -45,6 +58,10 @@ class VentanaReportesCierres(QWidget):
         self.tabla.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.tabla.itemSelectionChanged.connect(self._mostrar_detalle)
         layout.addWidget(self.tabla)
+
+        self.tabla.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
 
         self.etiqueta_totales_periodo = QLabel()
         self.etiqueta_totales_periodo.setWordWrap(True)
@@ -64,6 +81,9 @@ class VentanaReportesCierres(QWidget):
         boton_pdf.clicked.connect(self.exportar_pdf)
         fila_acciones.addWidget(boton_excel)
         fila_acciones.addWidget(boton_pdf)
+        boton_correccion = QPushButton("Registrar corrección")
+        boton_correccion.clicked.connect(self.registrar_correccion)
+        fila_acciones.addWidget(boton_correccion)
         fila_acciones.addStretch()
         layout.addLayout(fila_acciones)
 
@@ -167,3 +187,51 @@ class VentanaReportesCierres(QWidget):
             QMessageBox.critical(self, "Error al exportar", str(e))
             return
         QMessageBox.information(self, "Listo", f"Se exportó correctamente a:\n{ruta}")
+
+    def registrar_correccion(self):
+        filas = self.tabla.selectionModel().selectedRows()
+        if not filas:
+            QMessageBox.information(
+                self,
+                "Elegí un cierre",
+                "Seleccioná un cierre antes de registrar una corrección.",
+            )
+            return
+    
+        turno = self.turnos_cargados[filas[0].row()]
+    
+        descripcion, aceptado = QInputDialog.getMultiLineText(
+            self,
+            "Registrar corrección de cierre",
+            (
+                f"Turno: {turno.turno}\n\n"
+                "Describí la corrección o aclaración administrativa:"
+            ),
+        )
+    
+        if not aceptado:
+            return
+    
+        try:
+            registrar_correccion_cierre(
+                turno.id,
+                self.usuario.id,
+                descripcion,
+            )
+        except ErrorCierre as error:
+            QMessageBox.warning(
+                self,
+                "No se pudo registrar la corrección",
+                str(error),
+            )
+            return
+    
+        QMessageBox.information(
+            self,
+            "Corrección registrada",
+            (
+                "La corrección fue guardada en la auditoría. "
+                "El cierre original no fue modificado."
+            ),
+        )
+    

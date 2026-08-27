@@ -10,7 +10,7 @@ from database.modelos import (
     Usuario,
 )
 from services.auditoria_service import crear_registro_auditoria
-from services.iva_service import iva_categoria_formateado
+
 from utils.validacion import convertir_decimal_finito
 
 
@@ -73,7 +73,7 @@ def listar_categorias():
         db.close()
 
 
-def crear_categoria(nombre, usuario_id):
+def crear_categoria(nombre, iva, usuario_id):
     nombre = " ".join((nombre or "").strip().split())
     if not nombre:
         raise ErrorProducto("El nombre de la categoría es obligatorio.")
@@ -81,6 +81,18 @@ def crear_categoria(nombre, usuario_id):
         raise ErrorProducto(
             "El nombre de la categoría no puede superar los 80 caracteres."
         )
+
+    try:
+        iva_numero = float(iva)
+    except (TypeError, ValueError) as error:
+        raise ErrorProducto("La alícuota de IVA es inválida.") from error
+
+    if abs(iva_numero - 10.5) < 0.01:
+        iva_formateado = "10.5%"
+    elif abs(iva_numero - 21.0) < 0.01:
+        iva_formateado = "21%"
+    else:
+        raise ErrorProducto("El IVA debe ser 10,5% o 21%.")
 
     db = nueva_sesion()
     try:
@@ -97,10 +109,11 @@ def crear_categoria(nombre, usuario_id):
 
         categoria = Categoria(
             nombre=nombre,
-            iva=iva_categoria_formateado(nombre),
+            iva=iva_formateado,
         )
         db.add(categoria)
         db.flush()
+
         db.add(
             crear_registro_auditoria(
                 accion="CREAR_CATEGORIA",
@@ -113,6 +126,7 @@ def crear_categoria(nombre, usuario_id):
                 },
             )
         )
+
         db.commit()
         db.refresh(categoria)
         db.expunge(categoria)
