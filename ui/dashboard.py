@@ -1,148 +1,288 @@
-#from datetime import date, timedelta
-#from PySide6.QtWidgets import (
-#    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
-#    QTableWidget, QTableWidgetItem, QHeaderView
-#)
-#from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
-#from matplotlib.figure import Figure
-#
-#from services.reportes_service import resumen_periodo, ranking_productos, productos_stock_critico
-#from utils.formato import formatear_moneda, formatear_cantidad
-#
-#OPCIONES_PERIODO = ["Hoy", "Esta semana", "Este mes", "Este año", "Todo el historial"]
-#
-#
-#class VentanaDashboard(QWidget):
-#    def __init__(self):
-#        super().__init__()
-#        self.setWindowTitle("NEPOS — Dashboard")
-#        self.resize(1100, 760)
-#
-#        self._armar_interfaz()
-#        self._actualizar()
-#
-#    def _armar_interfaz(self):
-#        layout = QVBoxLayout()
-#        titulo = QLabel("▥  DASHBOARD")
-#        titulo.setObjectName("titulo_modulo")
-#        layout.addWidget(titulo)
-#        subtitulo = QLabel(
-#            "Ventas, rentabilidad estimada y alertas de inventario."
-#        )
-#        subtitulo.setObjectName("subtitulo")
-#        layout.addWidget(subtitulo)
-#
-#        fila_periodo = QHBoxLayout()
-#        self.combo_periodo = QComboBox()
-#        self.combo_periodo.addItems(OPCIONES_PERIODO)
-#        self.combo_periodo.currentTextChanged.connect(self._actualizar)
-#        fila_periodo.addWidget(QLabel("Período:"))
-#        fila_periodo.addWidget(self.combo_periodo)
-#        fila_periodo.addStretch()
-#        layout.addLayout(fila_periodo)
-#
-#        fila_kpis = QHBoxLayout()
-#        self.etiqueta_venta_bruta = self._crear_kpi("Ventas")
-#        self.etiqueta_ganancia = self._crear_kpi("Ganancia estimada")
-#        self.etiqueta_transacciones = self._crear_kpi("Transacciones")
-#        self.etiqueta_unidades = self._crear_kpi("Unidades vendidas")
-#        for etiqueta in (self.etiqueta_venta_bruta, self.etiqueta_ganancia,
-#                         self.etiqueta_transacciones, self.etiqueta_unidades):
-#            fila_kpis.addWidget(etiqueta)
-#        layout.addLayout(fila_kpis)
-#
-#        fila_contenido = QHBoxLayout()
-#
-#        columna_izquierda = QVBoxLayout()
-#        columna_izquierda.addWidget(QLabel("<b>Ranking de productos (por facturación)</b>"))
-#        self.figura = Figure(figsize=(5, 4))
-#        self.canvas = FigureCanvasQTAgg(self.figura)
-#        columna_izquierda.addWidget(self.canvas)
-#        fila_contenido.addLayout(columna_izquierda, stretch=2)
-#
-#        columna_derecha = QVBoxLayout()
-#        columna_derecha.addWidget(QLabel("<b>Stock crítico (5 unidades o menos)</b>"))
-#        self.tabla_stock_critico = QTableWidget(0, 3)
-#        self.tabla_stock_critico.setAlternatingRowColors(True)
-#        self.tabla_stock_critico.setHorizontalHeaderLabels(["Código", "Producto", "Stock"])
-#        self.tabla_stock_critico.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-#        columna_derecha.addWidget(self.tabla_stock_critico)
-#        fila_contenido.addLayout(columna_derecha, stretch=1)
-#
-#        layout.addLayout(fila_contenido)
-#        self.setLayout(layout)
-#
-#    def _crear_kpi(self, titulo):
-#        etiqueta = QLabel(f"<div style='text-align:center;'><small>{titulo}</small><br>"
-#                           f"<span style='font-size:20px; font-weight:bold;'>—</span></div>")
-#        etiqueta.setStyleSheet(
-#            "background:#ffffff; border:1px solid #cbd5e1;"
-#            "border-radius:10px; padding:14px; color:#172033;"
-#        )
-#        etiqueta.titulo = titulo
-#        return etiqueta
-#
-#    def _setear_kpi(self, etiqueta, valor):
-#        etiqueta.setText(
-#            f"<div style='text-align:center;'><small>{etiqueta.titulo}</small><br>"
-#            f"<span style='font-size:20px; font-weight:bold;'>{valor}</span></div>"
-#        )
-#
-#    def _rango_fechas(self):
-#        periodo = self.combo_periodo.currentText()
-#        hoy = date.today()
-#
-#        if periodo == "Hoy":
-#            desde = hoy
-#        elif periodo == "Esta semana":
-#            desde = hoy - timedelta(days=hoy.weekday())
-#        elif periodo == "Este mes":
-#            desde = hoy.replace(day=1)
-#        elif periodo == "Este año":
-#            desde = hoy.replace(month=1, day=1)
-#        else:
-#            return None, None  # "Todo el historial"
-#
-#        return desde.isoformat(), hoy.isoformat()
-#
-#    def _actualizar(self):
-#        fecha_desde, fecha_hasta = self._rango_fechas()
-#
-#        resumen = resumen_periodo(fecha_desde, fecha_hasta)
-#        self._setear_kpi(self.etiqueta_venta_bruta, formatear_moneda(resumen["venta_bruta"]))
-#        self._setear_kpi(self.etiqueta_ganancia, formatear_moneda(resumen["ganancia_estimada"]))
-#        self._setear_kpi(self.etiqueta_transacciones, str(resumen["transacciones"]))
-#        self._setear_kpi(self.etiqueta_unidades, formatear_cantidad(resumen["unidades"]))
-#
-#        ranking = ranking_productos(fecha_desde, fecha_hasta)
-#        self._dibujar_ranking(ranking)
-#
-#        stock_critico = productos_stock_critico()
-#        self.tabla_stock_critico.setRowCount(len(stock_critico))
-#        for fila, producto in enumerate(stock_critico):
-#            self.tabla_stock_critico.setItem(fila, 0, QTableWidgetItem(producto.codigo))
-#            self.tabla_stock_critico.setItem(fila, 1, QTableWidgetItem(producto.descripcion))
-#            self.tabla_stock_critico.setItem(fila, 2, QTableWidgetItem(formatear_cantidad(producto.stock)))
-#
-#    def _dibujar_ranking(self, ranking):
-#        self.figura.clear()
-#        ax = self.figura.subplots()
-#
-#        if not ranking:
-#            ax.text(0.5, 0.5, "Sin ventas en este período", ha="center", va="center")
-#            self.canvas.draw()
-#            return
-#
-#        ranking_invertido = list(reversed(ranking))  # para que el más vendido quede arriba
-#        nombres = [r["descripcion"] for r in ranking_invertido]
-#        totales = [r["total"] for r in ranking_invertido]
-#
-#        self.figura.patch.set_facecolor("#ffffff")
-#        ax.set_facecolor("#ffffff")
-#        ax.barh(nombres, totales, color="#12aa52")
-#        ax.set_xlabel("Facturación ($)")
-#        ax.spines["top"].set_visible(False)
-#        ax.spines["right"].set_visible(False)
-#        self.figura.tight_layout()
-#        self.canvas.draw()
-#
+from datetime import date, timedelta
+
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from services.reportes_service import (
+    productos_stock_critico,
+    ranking_productos,
+    resumen_periodo,
+)
+from ui.estilos import ESTILO_GLOBAL
+from utils.formato import formatear_cantidad, formatear_moneda
+
+
+OPCIONES_PERIODO = [
+    "Hoy",
+    "Esta semana",
+    "Este mes",
+    "Este año",
+    "Todo el historial",
+]
+
+
+class VentanaDashboard(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        self.setWindowTitle("NEPOS — Dashboard")
+        self.resize(1180, 760)
+        self.setMinimumSize(950, 650)
+        self.setStyleSheet(ESTILO_GLOBAL)
+
+        self._armar_interfaz()
+        self._actualizar()
+
+    def _armar_interfaz(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(18, 12, 18, 16)
+        layout.setSpacing(10)
+
+        cabecera = QFrame()
+        cabecera.setObjectName("tarjeta")
+        fila_cabecera = QHBoxLayout(cabecera)
+
+        textos = QVBoxLayout()
+        titulo = QLabel("DASHBOARD ADMINISTRATIVO")
+        titulo.setObjectName("titulo_modulo")
+        subtitulo = QLabel(
+            "Ventas confirmadas, productos destacados y alertas de stock."
+        )
+        subtitulo.setObjectName("subtitulo")
+
+        textos.addWidget(titulo)
+        textos.addWidget(subtitulo)
+
+        self.combo_periodo = QComboBox()
+        self.combo_periodo.addItems(OPCIONES_PERIODO)
+        self.combo_periodo.currentTextChanged.connect(
+            self._actualizar
+        )
+
+        boton_actualizar = QPushButton("Actualizar")
+        boton_actualizar.clicked.connect(self._actualizar)
+
+        fila_cabecera.addLayout(textos)
+        fila_cabecera.addStretch()
+        fila_cabecera.addWidget(QLabel("Período:"))
+        fila_cabecera.addWidget(self.combo_periodo)
+        fila_cabecera.addWidget(boton_actualizar)
+
+        layout.addWidget(cabecera)
+
+        grilla_kpis = QGridLayout()
+        grilla_kpis.setHorizontalSpacing(10)
+        grilla_kpis.setVerticalSpacing(10)
+
+        self.kpi_ventas = self._crear_kpi("Ventas brutas")
+        self.kpi_transacciones = self._crear_kpi("Transacciones")
+        self.kpi_ticket = self._crear_kpi("Ticket promedio")
+        self.kpi_unidades = self._crear_kpi("Unidades vendidas")
+
+        grilla_kpis.addWidget(self.kpi_ventas, 0, 0)
+        grilla_kpis.addWidget(self.kpi_transacciones, 0, 1)
+        grilla_kpis.addWidget(self.kpi_ticket, 0, 2)
+        grilla_kpis.addWidget(self.kpi_unidades, 0, 3)
+
+        layout.addLayout(grilla_kpis)
+
+        contenido = QHBoxLayout()
+        contenido.setSpacing(10)
+
+        bloque_ranking = QFrame()
+        bloque_ranking.setObjectName("tarjeta")
+        ranking_layout = QVBoxLayout(bloque_ranking)
+
+        ranking_layout.addWidget(
+            QLabel("<b>Productos más vendidos por facturación</b>")
+        )
+
+        self.tabla_ranking = QTableWidget(0, 3)
+        self.tabla_ranking.setHorizontalHeaderLabels(
+            ["Producto", "Cantidad", "Facturación"]
+        )
+        self.tabla_ranking.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.tabla_ranking.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.tabla_ranking.horizontalHeader().setSectionResizeMode(
+            0,
+            QHeaderView.ResizeMode.Stretch,
+        )
+        ranking_layout.addWidget(self.tabla_ranking)
+
+        contenido.addWidget(bloque_ranking, 2)
+
+        bloque_stock = QFrame()
+        bloque_stock.setObjectName("tarjeta")
+        stock_layout = QVBoxLayout(bloque_stock)
+
+        stock_layout.addWidget(
+            QLabel("<b>Alertas de stock crítico</b>")
+        )
+
+        self.tabla_stock = QTableWidget(0, 3)
+        self.tabla_stock.setHorizontalHeaderLabels(
+            ["Código", "Producto", "Stock"]
+        )
+        self.tabla_stock.setEditTriggers(
+            QTableWidget.EditTrigger.NoEditTriggers
+        )
+        self.tabla_stock.setSelectionBehavior(
+            QTableWidget.SelectionBehavior.SelectRows
+        )
+        self.tabla_stock.horizontalHeader().setSectionResizeMode(
+            1,
+            QHeaderView.ResizeMode.Stretch,
+        )
+        stock_layout.addWidget(self.tabla_stock)
+
+        contenido.addWidget(bloque_stock, 1)
+
+        layout.addLayout(contenido, 1)
+
+        self.etiqueta_aviso = QLabel(
+            "La rentabilidad no se muestra todavía porque falta guardar "
+            "el costo unitario histórico en cada venta."
+        )
+        self.etiqueta_aviso.setWordWrap(True)
+        self.etiqueta_aviso.setStyleSheet(
+            "color: #92400e; background: #fffbeb; "
+            "border: 1px solid #fcd34d; border-radius: 7px; "
+            "padding: 8px; font-weight: 600;"
+        )
+        layout.addWidget(self.etiqueta_aviso)
+
+    def _crear_kpi(self, titulo):
+        tarjeta = QFrame()
+        tarjeta.setObjectName("tarjeta")
+
+        layout = QVBoxLayout(tarjeta)
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        etiqueta_titulo = QLabel(titulo.upper())
+        etiqueta_titulo.setStyleSheet(
+            "color: #64748b; font-size: 11px; font-weight: 800;"
+        )
+
+        etiqueta_valor = QLabel("—")
+        etiqueta_valor.setStyleSheet(
+            "color: #172033; font-size: 24px; font-weight: 900;"
+        )
+        etiqueta_valor.setAlignment(
+            Qt.AlignmentFlag.AlignLeft
+            | Qt.AlignmentFlag.AlignVCenter
+        )
+
+        layout.addWidget(etiqueta_titulo)
+        layout.addWidget(etiqueta_valor)
+
+        tarjeta.etiqueta_valor = etiqueta_valor
+        return tarjeta
+
+    @staticmethod
+    def _setear_kpi(tarjeta, valor):
+        tarjeta.etiqueta_valor.setText(valor)
+
+    def _rango_fechas(self):
+        hoy = date.today()
+        periodo = self.combo_periodo.currentText()
+
+        if periodo == "Hoy":
+            desde = hoy
+        elif periodo == "Esta semana":
+            desde = hoy - timedelta(days=hoy.weekday())
+        elif periodo == "Este mes":
+            desde = hoy.replace(day=1)
+        elif periodo == "Este año":
+            desde = hoy.replace(month=1, day=1)
+        else:
+            return None, None
+
+        return desde.isoformat(), hoy.isoformat()
+
+    def _actualizar(self):
+        fecha_desde, fecha_hasta = self._rango_fechas()
+
+        resumen = resumen_periodo(
+            fecha_desde,
+            fecha_hasta,
+        )
+        ranking = ranking_productos(
+            fecha_desde,
+            fecha_hasta,
+        )
+        stock_critico = productos_stock_critico()
+
+        self._setear_kpi(
+            self.kpi_ventas,
+            formatear_moneda(resumen["venta_bruta"]),
+        )
+        self._setear_kpi(
+            self.kpi_transacciones,
+            str(resumen["transacciones"]),
+        )
+        self._setear_kpi(
+            self.kpi_ticket,
+            formatear_moneda(resumen["ticket_promedio"]),
+        )
+        self._setear_kpi(
+            self.kpi_unidades,
+            formatear_cantidad(resumen["unidades"]),
+        )
+
+        self.tabla_ranking.setRowCount(len(ranking))
+        for fila, producto in enumerate(ranking):
+            self.tabla_ranking.setItem(
+                fila,
+                0,
+                QTableWidgetItem(producto["descripcion"]),
+            )
+            self.tabla_ranking.setItem(
+                fila,
+                1,
+                QTableWidgetItem(
+                    formatear_cantidad(producto["unidades"])
+                ),
+            )
+            self.tabla_ranking.setItem(
+                fila,
+                2,
+                QTableWidgetItem(
+                    formatear_moneda(producto["total"])
+                ),
+            )
+
+        self.tabla_stock.setRowCount(len(stock_critico))
+        for fila, producto in enumerate(stock_critico):
+            self.tabla_stock.setItem(
+                fila,
+                0,
+                QTableWidgetItem(producto.codigo),
+            )
+            self.tabla_stock.setItem(
+                fila,
+                1,
+                QTableWidgetItem(producto.descripcion),
+            )
+            self.tabla_stock.setItem(
+                fila,
+                2,
+                QTableWidgetItem(
+                    formatear_cantidad(producto.stock)
+                ),
+            )

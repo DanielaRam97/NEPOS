@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QInputDialog
 )
 from services.suspendida_service import (
     listar_suspendidas, recuperar_suspendida, eliminar_suspendida, ErrorSuspendida
@@ -91,7 +91,20 @@ class DialogoVentasSuspendidas(QDialog):
         )
         if respuesta == QMessageBox.StandardButton.Yes:
             try:
-                eliminar_suspendida(suspendida.id, self.usuario_id)
+                motivo, aceptado = QInputDialog.getMultiLineText(
+                    self,
+                    "Motivo de descarte",
+                    "Indicá por qué se descarta esta venta suspendida:",
+                )
+                
+                if not aceptado:
+                    return
+                
+                eliminar_suspendida(
+                    suspendida.id,
+                    self.usuario_id,
+                    motivo,
+                )
             except ErrorSuspendida as error:
                 QMessageBox.warning(self, "No se pudo eliminar", str(error))
                 return

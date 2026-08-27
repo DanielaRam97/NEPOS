@@ -20,6 +20,10 @@ from PySide6.QtWidgets import (
     QInputDialog,
 )
 
+from ui.auditoria import VentanaAuditoria
+from ui.dashboard import VentanaDashboard
+from ui.auditoria import VentanaAuditoria
+
 from services.exportar_service import (
     exportar_cierre_turno_excel,
     exportar_cierre_turno_pdf,
@@ -32,7 +36,6 @@ from services.cierre_service import (
 )
 from services.venta_service import (
     ErrorVenta,
-    PERMITIR_STOCK_NEGATIVO,
     buscar_producto,
     buscar_producto_por_plu,
     interpretar_codigo_balanza,
@@ -63,11 +66,11 @@ from ui.promociones import VentanaPromociones
 from ui.reportes_cierres import VentanaReportesCierres
 from utils.rutas import directorio_cierres, ruta_icono
 from version import __version__
-
+from services.configuracion_service import obtener_booleano
 
 # Control temporal de módulos para esta versión.
 # Cambiar a True cuando el Dashboard vuelva a habilitarse.
-HABILITAR_DASHBOARD = False
+HABILITAR_DASHBOARD = True
 
 
 ESTILO_GENERAL = """
@@ -422,31 +425,36 @@ class VentanaCaja(QWidget):
                 "usuarios",
                 VentanaUsuarios(self.usuario),
             )
-
-        if rol in ("ADMIN", "SUPERVISOR"):
             self._registrar_pagina(
                 "historial",
                 VentanaHistorial(self.usuario),
             )
+
         if rol == "ADMIN":
             self._registrar_pagina(
                 "promociones",
                 VentanaPromociones(self.usuario),
             )
-
-        if rol == "ADMIN":
-            self._registrar_pagina("reportes_cierres", VentanaReportesCierres())
+            self._registrar_pagina(
+                "reportes_cierres",
+                VentanaReportesCierres(self.usuario),
+            )
+            self._registrar_pagina(
+                "auditoria",
+                VentanaAuditoria(self.usuario),
+            )
             self._registrar_pagina(
                 "configuracion",
                 VentanaConfiguracion(self.usuario),
             )
 
-        #if rol == "ADMIN" and HABILITAR_DASHBOARD:
-        #    self._registrar_pagina(
-        #        "dashboard",
-        #        VentanaDashboard(),
-        #    )
-#
+            if HABILITAR_DASHBOARD:
+                self._registrar_pagina(
+                    "dashboard",
+                    VentanaDashboard(),
+                )
+
+
     def _crear_navegacion(self):
         fila = QHBoxLayout()
         fila.setSpacing(5)
@@ -462,6 +470,13 @@ class VentanaCaja(QWidget):
 
         if self.usuario.rol.upper() == "ADMIN":
             self._agregar_pestana(fila, "reportes_cierres", "Reportes de Cierres")
+
+        if self.usuario.rol.upper() == "ADMIN":
+            self._agregar_pestana(
+                fila,
+                "auditoria",
+                "Auditoría",
+            )
 
         if self.usuario.rol.upper() == "ADMIN" and HABILITAR_DASHBOARD:
             self._agregar_pestana(fila, "dashboard", "Dashboard")
@@ -966,6 +981,9 @@ class VentanaCaja(QWidget):
             valor = valor.replace(",", ".")
         return float(valor)
 
+    def _permite_stock_negativo(self):
+        return obtener_booleano("PERMITIR_STOCK_NEGATIVO")
+
     def _agregar_al_carrito(self, producto, cantidad):
         categoria = (
             producto.categoria_rel.nombre
@@ -993,7 +1011,7 @@ class VentanaCaja(QWidget):
                     )
                     return
                 if (
-                    not PERMITIR_STOCK_NEGATIVO
+                    not self._permite_stock_negativo()
                     and not pendiente
                     and nueva_cantidad > stock
                 ):
@@ -1010,7 +1028,7 @@ class VentanaCaja(QWidget):
                 return
 
         if (
-            not PERMITIR_STOCK_NEGATIVO
+            not self._permite_stock_negativo()
             and not pendiente
             and cantidad > stock
         ):
@@ -1104,7 +1122,7 @@ class VentanaCaja(QWidget):
             )
             return
         if (
-            not PERMITIR_STOCK_NEGATIVO
+            not self._permite_stock_negativo()
             and not item["pendiente_revision"]
             and cantidad > item["stock_disponible"]
         ):

@@ -227,3 +227,51 @@ def listar_turnos_cerrados(fecha_desde=None, fecha_hasta=None):
         return query.all()
     finally:
         db.close()
+def registrar_correccion_cierre(turno_id, usuario_id, descripcion):
+    descripcion = " ".join((descripcion or "").strip().split())
+
+    if not descripcion:
+        raise ErrorCierre("La descripción de la corrección es obligatoria.")
+    if len(descripcion) > 500:
+        raise ErrorCierre(
+            "La descripción no puede superar los 500 caracteres."
+        )
+
+    db = nueva_sesion()
+    try:
+        turno = db.get(Turno, turno_id)
+        if not turno:
+            raise ErrorCierre("Turno no encontrado.")
+        if turno.estado != "CERRADO":
+            raise ErrorCierre(
+                "Solo se pueden registrar correcciones en turnos cerrados."
+            )
+
+        usuario = db.get(Usuario, usuario_id)
+        if not usuario or not bool(usuario.activo):
+            raise ErrorCierre("El usuario no está habilitado.")
+        if usuario.rol != "ADMIN":
+            raise ErrorCierre(
+                "Solo ADMIN puede registrar correcciones de cierre."
+            )
+
+        db.add(
+            crear_registro_auditoria(
+                accion="CORRECCION_CIERRE",
+                entidad="TURNO",
+                entidad_id=turno.id,
+                turno_id=turno.id,
+                usuario_id=usuario.id,
+                nivel="ADVERTENCIA",
+                detalle={
+                    "turno": turno.turno,
+                    "descripcion": descripcion,
+                },
+            )
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()

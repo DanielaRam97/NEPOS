@@ -1,8 +1,13 @@
 from sqlalchemy.orm import joinedload
 from database.conexion import nueva_sesion
-from database.modelos import Producto, AjusteStock, Usuario
+from database.modelos import (
+    AjusteStock,
+    MovimientoStock,
+    Producto,
+    Usuario,
+)
 from utils.validacion import convertir_decimal_finito
-
+from services.auditoria_service import crear_registro_auditoria
 
 class ErrorAjuste(Exception):
     pass
@@ -56,14 +61,47 @@ def registrar_ajuste(*, codigo_producto, stock_fisico, motivo, usuario_id):
         if diferencia == 0:
             raise ErrorAjuste("El stock físico es igual al actual, no hay nada que ajustar.")
 
-        db.add(AjusteStock(
-            producto_id=producto.id,
-            stock_anterior=stock_anterior,
-            stock_nuevo=stock_fisico,
-            diferencia=diferencia,
-            motivo=motivo,
-            usuario_id=usuario_id,
-        ))
+        db.add(
+            AjusteStock(
+                producto_id=producto.id,
+                stock_anterior=stock_anterior,
+                stock_nuevo=stock_fisico,
+                diferencia=diferencia,
+                motivo=motivo,
+                usuario_id=usuario_id,
+            )
+        )
+        
+        db.add(
+            MovimientoStock(
+                producto_id=producto.id,
+                usuario_id=usuario_id,
+                tipo="AJUSTE_STOCK",
+                cantidad=diferencia,
+                stock_anterior=stock_anterior,
+                stock_nuevo=stock_fisico,
+                motivo=motivo,
+            )
+        )
+        
+        db.add(
+            crear_registro_auditoria(
+                accion="STOCK_AJUSTADO",
+                entidad="PRODUCTO",
+                entidad_id=producto.id,
+                usuario_id=usuario_id,
+                nivel="ADVERTENCIA",
+                detalle={
+                    "codigo": producto.codigo,
+                    "producto": producto.descripcion,
+                    "stock_anterior": stock_anterior,
+                    "stock_nuevo": stock_fisico,
+                    "diferencia": diferencia,
+                    "motivo": motivo,
+                },
+            )
+        )
+        
         producto.stock = stock_fisico
         db.commit()
         return {"diferencia": diferencia, "stock_anterior": stock_anterior, "stock_nuevo": stock_fisico}
